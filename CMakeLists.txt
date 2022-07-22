@@ -15,8 +15,8 @@ SET(CMAKE_CXX_FLAGS_RELEASE "$ENV{CXXFLAGS} -O3 -Wall")
 aux_source_directory(src dir_src)
 
 # 添加子目录,使子目录下CMakeLists.txt编译
-add_subdirectory(src/algorithm)
-add_subdirectory(src/designPatterns)
+# add_subdirectory(src/algorithm)
+# add_subdirectory(src/designPatterns)
 add_subdirectory(src/server)
 
 
@@ -24,6 +24,6 @@ add_subdirectory(src/server)
 add_executable(Main ${dir_src})
 
 # 添加链接库
-target_link_libraries(Main algorithm)
-target_link_libraries(Main designPatterns)
+# target_link_libraries(Main algorithm)
+# target_link_libraries(Main designPatterns)
 target_link_libraries(Main server)

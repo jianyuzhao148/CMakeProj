@@ -1,16 +1,21 @@
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <iostream>
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <pthread.h>
+#include <signal.h>
 #include "SocketServer.h"
+#include <errno.h>
+#include <assert.h>
+#include <sys/epoll.h>
+int getHeaderLine(int sock, char* buf, int size);
 
 bool SocketServer::initSocket() {
 	bzero(&servAddr, sizeof(servAddr));
 	servAddr.sin_family = AF_INET;
-	servAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	servAddr.sin_addr.s_addr = htonl(INADDR_ANY);//转换字节序
 	servAddr.sin_port = htons(PORT);
 
 	serverSocketFD = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -21,11 +26,11 @@ bool SocketServer::initSocket() {
 	return true;
 }
 
-void* workThread(int clientFD) {
+void SocketServer::workThread() {
 	char url[255];
 	char buf[1024];
 	//获取一行请求头
-	int numchars = getHeaderLine(*clientFD, buf, sizeof(buf));
+	int numchars = getHeaderLine(clientSocketFD, buf, sizeof(buf));
 	int i = 0, j = 0;
 	char method[255];
 	//获取第一个space之前的字符串，就是请求方法
@@ -79,8 +84,9 @@ void* workThread(int clientFD) {
 			"<p>This is a simple webserver<p>"
 			"</body></html>\r\n";
 
-		send(clientFD, response, sizeof(response), 0);
+		send(clientSocketFD, response, sizeof(response), 0);
 	}
+	_exit(0);
 }
 
 bool SocketServer::acceptSocket() {
@@ -90,9 +96,14 @@ bool SocketServer::acceptSocket() {
 		socklen_t  clientAddSize = sizeof(clientAddr);
 		//获取客户端连接
 		clientSocketFD = accept(serverSocketFD, (sockaddr*)&clientAddr, &clientAddSize);
-		pthread_create(&newthread, NULL, workThread, clientSocketFD);
-
-
+		//int result = pthread_create(&newthread, NULL, workThread, &clientSocketFD);
+		int pid = fork();//父进程产生子进程，获取子进程pid
+		if (pid == 0) {//在子进程中
+			workThread();
+		}
+		else if (pid > 0) {//在父进程中
+			close(clientSocketFD);
+		}
 		close(clientSocketFD);
 	}
 }
@@ -139,8 +150,93 @@ SocketServer::SocketServer() {
 		return;
 	}
 	acceptSocket();
+	//forkTest();
+}
+
+void SocketServer::forkTest() {
+	int childPid = fork();//使用fork生成子进程
+	printf("execute preccess \n");
+
+	if (childPid == 0) {
+		printf("main preccess \n");
+	}
+	else if (childPid > 0) {
+		printf("child preccess\n");
+	}
+	else {
+		printf("Fork Error \n");
+	}
 }
 
 SocketServer::~SocketServer() {
 
+}
+
+bool stop = true;
+
+void signalHandle(int sig) {
+	std::cout << sig << std::endl;
+	stop = false;
+}
+
+void initSocket() {
+	signal(SIGTERM, signalHandle);//信号处理函数
+	int sockFD = socket(PF_INET, SOCK_STREAM, 0);
+	assert(sockFD >= 0);
+	sockaddr_in sockAddr;
+	bzero(&sockAddr, sizeof(sockAddr));
+	sockAddr.sin_family = AF_INET;
+	sockAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	sockAddr.sin_port = htons(8080);
+	//inet_pton(AF_INET, "", &sockAddr.sin_addr);
+	// 绑定socket和socket地址
+	if (bind(sockFD, (const sockaddr*)&sockAddr, sizeof(sockAddr)) == -1) {
+		std::cout << "Bind Socket Error:" << errno << std::endl;
+	}
+	if (listen(sockFD, 5) == -1) {
+		std::cout << "Listen Socket Error:" << errno << std::endl;
+	}
+	std::cout << "Server Online" << std::endl;
+
+
+	while (stop) {
+		std::cout << "While Print..." << std::endl;
+		sleep(1);
+	}
+	close(sockFD);
+}
+
+int main(int argc, char* argv[]) {
+	int sockFD = socket(PF_INET, SOCK_STREAM, 0);
+	assert(sockFD >= 0);
+	sockaddr_in sockAddr;
+	bzero(&sockAddr, sizeof(sockAddr));
+	sockAddr.sin_family = AF_INET;
+	sockAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	sockAddr.sin_port = htons(8080);
+	bind(sockFD, (sockaddr*)&sockAddr, sizeof(sockAddr));
+	listen(sockFD, 5);
+	sockaddr svrAddr;
+	unsigned int addrLen2;
+	getsockname(sockFD, &svrAddr, &addrLen2);
+	std::cout << "Server Online" << svrAddr.sa_data << std::endl;
+	sockaddr_in clientAddr;
+	unsigned int addrLen = sizeof(clientAddr);
+	int clienSockFD;
+	int msgLen;
+	while (true)
+	{
+		//读写数据
+		clienSockFD = accept(sockFD, (sockaddr*)&clientAddr, &addrLen);
+		char buffer[1024];
+		memset(buffer, '\0', 1024);
+		msgLen = recv(clienSockFD, buffer, 1024 - 1, 0);
+		printf("%d,%s", msgLen, buffer);
+		memset(buffer, '\0', 1024);
+		msgLen = recv(clienSockFD, buffer, 1024 - 1, MSG_OOB);
+		printf("%d,%s", msgLen, buffer);
+		close(clienSockFD);
+	}
+	close(sockFD);
+	return 0;
 }

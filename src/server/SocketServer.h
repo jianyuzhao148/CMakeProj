@@ -1,3 +1,5 @@
+#ifndef __SOCKETSERVER__
+#define __SOCKETSERVER__
 #include <netinet/in.h>
 
 class SocketServer {
@@ -9,6 +11,10 @@ private:
 public:
 	SocketServer();
 	bool initSocket();
+	void workThread();
 	bool acceptSocket();
+	void forkTest();
 	~SocketServer();
 };
+
+#endif // !SOCKETSERVER
